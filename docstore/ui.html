@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docstore — 数组字段多键索引浏览器</title>
+<style>
+  :root {
+    --bg:#0f1116; --panel:#171a22; --panel2:#1e222c; --line:#2a2f3a;
+    --fg:#e6e9ef; --dim:#9aa3b2; --accent:#6ea8fe; --good:#4ec9a0;
+    --warn:#e8b339; --bad:#f06a6a; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line);
+           display:flex; gap:18px; align-items:baseline; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:.2px; }
+  header .sub { color:var(--dim); font-size:12px; }
+  .stats { margin-left:auto; color:var(--dim); font-size:12px;
+           display:flex; gap:14px; flex-wrap:wrap; }
+  .stats b { color:var(--fg); font-weight:600; }
+  main { display:grid; grid-template-columns: 380px 1fr; gap:0; height:calc(100vh - 56px); }
+  .left { border-right:1px solid var(--line); overflow:auto; }
+  .right { display:grid; grid-template-rows: auto 1fr; overflow:hidden; }
+  section { padding:14px 16px; border-bottom:1px solid var(--line); }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+       color:var(--dim); margin:0 0 10px; font-weight:600; }
+  textarea { width:100%; min-height:118px; resize:vertical; background:var(--panel);
+             color:var(--fg); border:1px solid var(--line); border-radius:8px;
+             padding:10px; font-family:var(--mono); font-size:12.5px; }
+  input[type=text], input[type=number] { width:100%; background:var(--panel);
+             color:var(--fg); border:1px solid var(--line); border-radius:6px;
+             padding:7px 9px; font-family:var(--mono); font-size:12.5px; }
+  .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .row > * { flex:0 0 auto; }
+  .row .grow { flex:1 1 auto; }
+  button { background:var(--panel2); color:var(--fg); border:1px solid var(--line);
+           border-radius:6px; padding:7px 12px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:#23406e; border-color:#33558f; }
+  button.danger { color:var(--bad); }
+  label.chk { display:flex; gap:6px; align-items:center; color:var(--dim); font-size:12.5px; }
+  .preset { display:block; width:100%; text-align:left; margin:6px 0; padding:9px 10px;
+            background:var(--panel); border:1px solid var(--line); border-radius:6px;
+            cursor:pointer; font-size:12.5px; color:var(--fg); }
+  .preset:hover { border-color:var(--accent); }
+  .preset small { display:block; color:var(--dim); margin-top:3px; font-family:var(--mono); }
+  .pill { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px;
+          border:1px solid var(--line); color:var(--dim); }
+  .pill.same { color:var(--good); border-color:#2c5a49; background:#12251f; }
+  .pill.indep { color:var(--warn); border-color:#5a4a1f; background:#241f12; }
+  .tabs { display:flex; gap:2px; padding:0 16px; border-bottom:1px solid var(--line);
+          background:var(--panel); }
+  .tab { padding:10px 14px; cursor:pointer; color:var(--dim); font-size:13px;
+         border-bottom:2px solid transparent; }
+  .tab.active { color:var(--fg); border-bottom-color:var(--accent); }
+  .content { overflow:auto; padding:16px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);
+           vertical-align:top; }
+  th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--bg); }
+  td.mono, .mono { font-family:var(--mono); }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+        padding:12px; overflow:auto; font-family:var(--mono); font-size:12px;
+        white-space:pre-wrap; word-break:break-word; }
+  .doc { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+         padding:10px 12px; margin-bottom:10px; }
+  .doc .id { color:var(--accent); font-family:var(--mono); font-size:12px; }
+  .mut { color:var(--dim); }
+  .err { color:var(--bad); }
+  .ok { color:var(--good); }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .kv { display:grid; grid-template-columns: 170px 1fr; gap:4px 10px; font-size:12.5px; }
+  .kv .k { color:var(--dim); }
+  .bar { height:6px; border-radius:3px; background:var(--panel2); overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--accent); }
+  .entry { font-family:var(--mono); font-size:12px; padding:4px 8px; border-radius:5px;
+           background:var(--panel2); display:inline-block; margin:2px 4px 2px 0; }
+  .hint { color:var(--dim); font-size:12px; margin-top:6px; }
+  a.link { color:var(--accent); cursor:pointer; text-decoration:none; }
+  a.link:hover { text-decoration:underline; }
+  .spinner { color:var(--warn); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>docstore</h1>
+  <span class="sub">数组字段多键索引 · 两种元素语义 · 查询计划</span>
+  <div class="stats" id="stats"></div>
+</header>
+<main>
+  <div class="left">
+    <section>
+      <h2>运营查询：两种写法</h2>
+      <button class="preset" data-q='{"specs":{"$elemMatch":{"color":"red","size":"XL","stock":{"$gt":0}}}}'>
+        同一个元素同时满足 <span class="pill same">$elemMatch</span>
+        <small>{"specs":{"$elemMatch":{"color":"red","size":"XL","stock":{"$gt":0}}}}</small>
+      </button>
+      <button class="preset" data-q='{"$some":{"specs.color":"red","specs.size":"XL","specs.stock":{"$gt":0}}}'>
+        不同元素各自满足 <span class="pill indep">$some</span>
+        <small>{"$some":{"specs.color":"red","specs.size":"XL","specs.stock":{"$gt":0}}}</small>
+      </button>
+      <button class="preset" data-q='{"specs.color":"red","specs.size":"XL","specs.stock":{"$gt":0}}'>
+        隐式扇出（旧写法等价于 $some） <span class="pill indep">dotted</span>
+        <small>{"specs.color":"red","specs.size":"XL","specs.stock":{"$gt":0}}</small>
+      </button>
+      <div class="hint">上面两种写法结果不同：隐式写法会返回“红色 S 码 + 另一个颜色 XL 码”的商品。</div>
+    </section>
+    <section>
+      <h2>查询</h2>
+      <textarea id="qjson">{"specs":{"$elemMatch":{"color":"red","size":"XL","stock":{"$gt":0}}}}</textarea>
+      <div class="row">
+        <input type="text" id="sortjson" placeholder='排序，如 ["-specs[].price"]'>
+      </div>
+      <div class="row">
+        <input type="number" id="limit" placeholder="limit" min="0" style="width:78px">
+        <input type="number" id="skip" placeholder="skip" min="0" style="width:78px">
+        <label class="chk"><input type="checkbox" id="scan"> 全表扫描</label>
+      </div>
+      <div class="row">
+        <button class="primary" onclick="runQuery()">运行查询</button>
+        <button onclick="explainQuery()">只看计划</button>
+      </div>
+      <div id="qerr" class="err"></div>
+    </section>
+    <section>
+      <h2>索引</h2>
+      <div id="indexList" class="mut">加载中…</div>
+      <div class="row" style="margin-top:12px">
+        <input type="text" id="newFields" class="grow" placeholder='字段，如 specs[].color, specs[].size, specs[].stock'>
+      </div>
+      <div class="row">
+        <input type="text" id="newAlign" placeholder="align，如 specs" style="width:150px">
+        <label class="chk"><input type="checkbox" id="newUnique"> unique</label>
+        <button onclick="createIndex()">建索引</button>
+      </div>
+      <div class="hint">同一数组元素上的复合索引需写 <span class="mono">align</span>；两个不同数组字段的复合索引会被拒绝。</div>
+    </section>
+  </div>
+  <div class="right">
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="results">结果</div>
+      <div class="tab" data-tab="plan">计划</div>
+      <div class="tab" data-tab="entries">索引条目</div>
+      <div class="tab" data-tab="stats">统计</div>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</main>
+
+<script>
+let lastResult = null;
+let activeTab = "results";
+
+function qparam(name) {
+  return new URLSearchParams(location.search).get(name);
+}
+
+function el(tag, attrs, ...children) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") n.className = v;
+    else if (k === "html") n.innerHTML = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v);
+  }
+  for (const c of children) {
+    if (c == null) continue;
+    n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return n;
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json();
+  if (!r.ok || j.error) throw new Error(formatErr(j.error || j));
+  return j;
+}
+
+function formatErr(e) {
+  if (typeof e === "string") return e;
+  if (e.message) return e.code ? `${e.code}: ${e.message}` : e.message;
+  return JSON.stringify(e);
+}
+
+async function loadStats() {
+  try {
+    const s = await api("/api/stats");
+    const st = document.getElementById("stats");
+    st.innerHTML = "";
+    st.appendChild(el("span", {}, "文档 ", el("b", {}, String(s.documents))));
+    for (const idx of s.indexes || []) {
+      st.appendChild(el("span", {},
+        "索引 ",
+        el("b", {}, idx.name),
+        ` ${idx.index_entries} 条 / ${idx.distinct_keys} 键`));
+    }
+    renderIndexList(s);
+  } catch (e) { document.getElementById("stats").textContent = formatErr(e); }
+}
+
+function renderIndexList(s) {
+  const box = document.getElementById("indexList");
+  box.innerHTML = "";
+  if (!s.indexes || !s.indexes.length) {
+    box.textContent = "还没有索引。";
+    return;
+  }
+  for (const idx of s.indexes) {
+    const row = el("div", {class:"row"},
+      el("span", {class:"mono"}, idx.fields.join(", ") +
+        (idx.align ? `  [align=${idx.align}]` : "")),
+      el("span", {class:"pill"}, `${idx.index_entries} 条`),
+      el("button", {class:"danger", onclick: () => dropIndex(idx.name)}, "删除"));
+    box.appendChild(row);
+  }
+}
+
+async function createIndex() {
+  const fields = document.getElementById("newFields").value
+    .split(",").map(s => s.trim()).filter(Boolean);
+  const body = {
+    fields,
+    align: document.getElementById("newAlign").value.trim() || null,
+    unique: document.getElementById("newUnique").checked,
+  };
+  try {
+    await api("/api/index", {method:"POST", headers:{"Content-Type":"application/json"},
+                             body: JSON.stringify(body)});
+    document.getElementById("newFields").value = "";
+    await loadStats();
+    render();
+  } catch (e) { alert(formatErr(e)); }
+}
+
+async function dropIndex(name) {
+  try {
+    await api("/api/drop-index", {method:"POST", headers:{"Content-Type":"application/json"},
+                                  body: JSON.stringify({name})});
+    await loadStats();
+    render();
+  } catch (e) { alert(formatErr(e)); }
+}
+
+function queryParams() {
+  const q = document.getElementById("qjson").value.trim() || "{}";
+  const sort = document.getElementById("sortjson").value.trim();
+  const limit = document.getElementById("limit").value;
+  const skip = document.getElementById("skip").value;
+  const scan = document.getElementById("scan").checked ? "1" : "0";
+  const p = new URLSearchParams({q, scan});
+  if (sort) p.set("sort", sort);
+  if (limit) p.set("limit", limit);
+  if (skip) p.set("skip", skip);
+  return p;
+}
+
+async function runQuery() {
+  document.getElementById("qerr").textContent = "";
+  try {
+    const res = await api("/api/query?" + queryParams());
+    lastResult = res;
+    activeTab = "results"; syncTabs();
+    render();
+  } catch (e) {
+    document.getElementById("qerr").textContent = formatErr(e);
+  }
+}
+
+async function explainQuery() {
+  document.getElementById("qerr").textContent = "";
+  try {
+    const res = await api("/api/explain?" + queryParams());
+    lastResult = lastResult || {};
+    lastResult.explain = res;
+    activeTab = "plan"; syncTabs();
+    render();
+  } catch (e) {
+    document.getElementById("qerr").textContent = formatErr(e);
+  }
+}
+
+async function showEntries(docId) {
+  try {
+    const res = await api("/api/entries/" + encodeURIComponent(JSON.stringify(docId)));
+    lastResult = lastResult || {};
+    lastResult.entries = res;
+    activeTab = "entries"; syncTabs();
+    render();
+  } catch (e) { alert(formatErr(e)); }
+}
+
+function syncTabs() {
+  for (const t of document.querySelectorAll(".tab"))
+    t.classList.toggle("active", t.dataset.tab === activeTab);
+  for (const b of document.querySelectorAll(".preset"))
+    b.style.borderColor = "";
+}
+
+document.getElementById("tabs").addEventListener("click", e => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  activeTab = tab.dataset.tab;
+  syncTabs(); render();
+});
+
+for (const b of document.querySelectorAll(".preset")) {
+  b.addEventListener("click", () => {
+    document.getElementById("qjson").value = b.dataset.q;
+    for (const x of document.querySelectorAll(".preset")) x.style.borderColor = "";
+    b.style.borderColor = "var(--accent)";
+    runQuery();
+  });
+}
+
+function render() {
+  const c = document.getElementById("content");
+  c.innerHTML = "";
+  if (activeTab === "results") return renderResults(c);
+  if (activeTab === "plan") return renderPlan(c);
+  if (activeTab === "entries") return renderEntries(c);
+  if (activeTab === "stats") return renderStats(c);
+}
+
+function renderResults(c) {
+  const r = lastResult;
+  if (!r || !r.documents) { c.appendChild(el("p", {class:"mut"}, "运行一个查询。 ")); return; }
+  const plan = r.plan || {};
+  const cnt = plan.counters || {};
+  const summary = el("div", {class:"doc"},
+    el("div", {class:"row"},
+      el("b", {}, `${r.count} 条结果`),
+      el("span", {class:"pill"}, `mode=${plan.mode}`),
+      el("span", {class:"pill"}, `候选 ${cnt.candidates ?? "?"}`),
+      el("span", {class:"pill"}, `扫描 ${cnt.documents_fetched ?? "?"}`),
+      el("span", {class:"pill"}, `键 ${cnt.index_keys_examined ?? "?"}`),
+      el("span", {class:"pill"}, `${(cnt.elapsed_ms ?? 0).toFixed(2)} ms`)),
+    el("div", {class:"hint"}, "点击 _id 查看它在每个索引里占的条目。"));
+  c.appendChild(summary);
+
+  if (r.array_semantics && r.array_semantics.length) {
+    const sem = el("div", {class:"row"}, el("span", {class:"mut"}, "语义："));
+    for (const s of r.array_semantics) {
+      const cls = s.semantics === "same-element" ? "same" :
+                  s.semantics === "independent-elements" ? "indep" : "";
+      sem.appendChild(el("span", {class:"pill " + cls},
+        `${s.field}: ${s.semantics}`));
+    }
+    c.appendChild(sem);
+  }
+
+  for (const doc of r.documents) {
+    const id = doc._id;
+    const head = el("div", {class:"row"},
+      el("a", {class:"id link", onclick: () => showEntries(id)}, String(JSON.stringify(id))),
+      el("span", {class:"mut"}, doc.name || ""),
+      el("span", {class:"mut"}, doc.brand || ""));
+    const specs = Array.isArray(doc.specs) ? doc.specs : null;
+    const d = el("div", {class:"doc"}, head);
+    if (specs) {
+      const t = el("table", {}, el("tr", {},
+        el("th",{},"#"), el("th",{},"color"), el("th",{},"size"),
+        el("th",{},"stock"), el("th",{},"price")));
+      specs.forEach((s, i) => {
+        const hdr = (s.color === "red" && s.size === "XL" && (s.stock||0) > 0);
+        t.appendChild(el("tr", {style: hdr ? "background:#12251f" : ""},
+          el("td",{class:"mono"}, String(i)),
+          el("td",{class:"mono"}, JSON.stringify(s.color)),
+          el("td",{class:"mono"}, JSON.stringify(s.size)),
+          el("td",{class:"mono"}, JSON.stringify(s.stock)),
+          el("td",{class:"mono"}, JSON.stringify(s.price))));
+      });
+      d.appendChild(t);
+    } else {
+      d.appendChild(el("pre", {}, JSON.stringify(doc, null, 2)));
+    }
+    c.appendChild(d);
+  }
+}
+
+function renderPlan(c) {
+  const e = lastResult && (lastResult.explain || lastResult);
+  if (!e || !e.plan) { c.appendChild(el("p", {class:"mut"}, "先运行一个查询或点“只看计划”。")); return; }
+  const p = e.plan, cnt = p.counters || {};
+  c.appendChild(el("pre", {}, e.plan_text || JSON.stringify(p, null, 2)));
+
+  const cov = e.covering;
+  if (cov) {
+    const d = el("div", {class:"doc"},
+      el("div", {class:"row"},
+        el("b", {}, "能否只靠索引返回（covering）"),
+        el("span", {class:"pill " + (cov.possible ? "same" : "indep")},
+          cov.possible ? "可以" : "不可以")),
+      el("ul", {}, ...(cov.blockers || []).map(b => el("li", {}, b))),
+      el("div", {class:"hint"}, cov.note || ""));
+    c.appendChild(d);
+  }
+  if (e.semantics) {
+    c.appendChild(el("div", {class:"doc"},
+      el("h2", {}, "查询语义"), el("div", {class:"mono"}, e.semantics)));
+  }
+  if (e.array_semantics && e.array_semantics.length) {
+    const t = el("table", {}, el("tr", {},
+      el("th",{},"字段"), el("th",{},"语义"), el("th",{},"算子"), el("th",{},"条件")));
+    for (const s of e.array_semantics) {
+      t.appendChild(el("tr", {},
+        el("td",{class:"mono"}, s.field),
+        el("td",{}, s.semantics),
+        el("td",{class:"mono"}, String(s.operator)),
+        el("td",{class:"mono"}, JSON.stringify(s.conditions || ""))));
+    }
+    c.appendChild(t);
+  }
+}
+
+function renderEntries(c) {
+  const r = lastResult && lastResult.entries;
+  if (!r) { c.appendChild(el("p", {class:"mut"}, "在结果里点一个 _id 查看它的索引条目。")); return; }
+  if (!r.found) { c.appendChild(el("p", {class:"err"}, "文档不存在")); return; }
+  c.appendChild(el("pre", {}, JSON.stringify(r.document, null, 2)));
+  for (const ix of r.indexes || []) {
+    const d = el("div", {class:"doc"},
+      el("div", {class:"row"},
+        el("b", {}, ix.index),
+        el("span", {class:"mut mono"}, ix.fields.join(", ")),
+        el("span", {class:"pill"}, `${ix.entries.length} 条`)));
+    if (ix.entries.length === 0) {
+      d.appendChild(el("div", {class:"mut"}, "（该文档没有产生条目：sparse 索引且字段缺失）"));
+    }
+    for (const ent of ix.entries) {
+      d.appendChild(el("span", {class:"entry"},
+        `${JSON.stringify(ent.key)}  ·  ${ent.documents_sharing_key} 个文档共享`));
+    }
+    c.appendChild(d);
+  }
+}
+
+async function renderStats(c) {
+  try {
+    const s = await api("/api/stats");
+    c.appendChild(el("pre", {}, JSON.stringify(s, null, 2)));
+    const v = await api("/api/verify");
+    c.appendChild(el("div", {class:"doc"},
+      el("h2", {}, "索引一致性校验（与重建结果对比）"),
+      el("pre", {}, JSON.stringify(v.verify, null, 2))));
+  } catch (e) { c.appendChild(el("p", {class:"err"}, formatErr(e))); }
+}
+
+loadStats();
+if (qparam("q")) {
+  document.getElementById("qjson").value = qparam("q");
+  runQuery();
+}
+</script>
+</body>
+</html>

@@ -16,3 +16,7 @@ node_modules/
 __pycache__/
 .venv/
 venv/
+
+# generated benchmark data (regenerate with `python3 -m docstore.bench`)
+data/
+*.idx
